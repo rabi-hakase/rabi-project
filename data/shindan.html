@@ -522,13 +522,18 @@ const LIFF_ID = '2009694101-j3TsEjCh';
   }
 })();
 
-// 診断結果をLINEトークに送信
+// 診断結果をWorkers APIに送信（liff.sendMessagesを使わずチャットに表示しない）
 async function sendResultToLine(resultType) {
   try {
     if (typeof liff === 'undefined' || !liff.isInClient()) return;
-    await liff.sendMessages([{ type: 'text', text: `診断結果:${resultType}` }]);
+    const profile = await liff.getProfile();
+    await fetch('https://rabi-line-bot.kazu1999916.workers.dev/api/diagnosis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: profile.userId, resultType }),
+    });
   } catch(e) {
-    console.warn('LIFF sendMessages failed:', e.message);
+    console.warn('diagnosis API call failed:', e.message);
   }
 }
 
