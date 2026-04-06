@@ -48,22 +48,24 @@ export async function handleLineEvent(event, env) {
 // ── ディスパッチ ──────────────────────────────────────────
 
 async function dispatch(userId, text, session, env) {
-  // LIFF診断からの結果受信（例: "診断結果:L1"）
-  if (text.startsWith('診断結果:')) {
-    const resultType = text.split(':')[1];
-    return receiveLiffResult(userId, resultType, env);
-  }
-
-  if (text === 'もらう') {
-    return sendLimitedContent(userId, session, env);
-  }
-
+  // リッチメニュー・クイックリプライからのコマンド
   if (text === 'note見る') {
     return sendNoteUrl(userId, session, env);
   }
+  if (text === '結果を受け取る') {
+    return sendLimitedContent(userId, session, env);
+  }
+  if (text === 'スタート' || text === '診断を受ける') {
+    return sendWelcome(userId, env);
+  }
 
-  // その他のメッセージはLIFFボタンを返す
-  return sendWelcome(userId, env);
+  // セッション状態で分岐
+  if (session?.step === 'done') {
+    return sendDoneGuide(userId, env);
+  }
+
+  // 新規 or 不明 → 軽い案内
+  return sendMenuGuide(userId, env);
 }
 
 // ── ウェルカム ────────────────────────────────────────────
@@ -103,9 +105,27 @@ async function sendWelcome(userId, env) {
   );
 }
 
+async function sendMenuGuide(userId, env) {
+  await pushLiffButton(
+    userId,
+    `ラビ博士です。\n\n9問に答えるだけで、あなたの恋愛がうまくいかない理由がわかります。\n所要時間2分・完全無料です。`,
+    '診断をはじめる（無料）',
+    `https://liff.line.me/${env.LIFF_ID}`,
+    env.LINE_TOKEN,
+  );
+}
+
+async function sendDoneGuide(userId, env) {
+  await pushText(
+    userId,
+    `診断結果はお手元にあります。\n\nコンテンツの再取得やnoteの確認は、下のメニューからどうぞ。\n再診断したい場合は「診断を受ける」をタップしてください。`,
+    env.LINE_TOKEN,
+  );
+}
+
 // ── LIFF診断結果受信 ──────────────────────────────────────
 
-async function receiveLiffResult(userId, resultType, env) {
+export async function receiveLiffResult(userId, resultType, env) {
   const validTypes = ['L1','L2','K1','K2','A1','A2'];
   if (!validTypes.includes(resultType)) {
     await sendWelcome(userId, env);
@@ -120,12 +140,19 @@ async function receiveLiffResult(userId, resultType, env) {
   await pushFlex(userId, altText, contents, env.LINE_TOKEN);
 
   // 2. 限定コンテンツを自動送信（ボタン不要）
-  const { contentKey, pdfPath } = getResultMeta(resultType);
+  const { contentKey, pdfPath, paidNoteKey } = getResultMeta(resultType);
   const content = LIMITED_CONTENTS[contentKey];
   const pdfUrl = env.SITE_URL ? `${env.SITE_URL}/${pdfPath}` : null;
   const messages = buildLimitedContentMessages(resultType, content, pdfUrl);
 
   await pushText(userId, messages.slice(0, 2), env.LINE_TOKEN);
+
+  // 3. 気づき固定メッセージ（防御解除）
+  const noteData = PAID_NOTES[paidNoteKey];
+  if (noteData?.fixedAwarenessText) {
+    await pushText(userId, noteData.fixedAwarenessText, env.LINE_TOKEN);
+  }
+
   await pushQuickReply(
     userId,
     messages[2],
