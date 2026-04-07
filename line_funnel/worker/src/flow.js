@@ -14,7 +14,6 @@ import {
   buildResultFlex,
   buildLimitedContentMessages,
   buildNoteMessage,
-  MSG_WELCOME,
   MSG_ERROR,
 } from './messages.js';
 
@@ -71,38 +70,22 @@ async function dispatch(userId, text, session, env) {
 // ── ウェルカム ────────────────────────────────────────────
 
 async function sendFollowWelcome(userId, env) {
-  await pushText(userId, `ラビ博士のLINEへようこそ！
-
-9問に答えるだけで、あなたの恋愛がうまくいかない理由がわかります。
-
-▶ あなたのつまずきパターン
-　→「いい人止まり」「期待して空回り」「アプリで会えない」など6タイプから特定
-
-▶ なぜそれが起きているか
-　→ 脳の認知構造・相手からの見え方・行動パターンの癖を解説
-
-▶ 最初に直すべきこと
-　→ 誠実さを捨てずに変えられる、具体的な1つの切り口
-
-完全無料・所要時間2分です。`, env.LINE_TOKEN);
-
+  await pushText(
+    userId,
+    `ラビ博士のLINEへようこそ！\n\n9問に答えるだけで、\nあなたの恋愛が止まりやすいポイントがわかります。\n\nわかることは3つです。\n\n・なぜ同じ失敗を繰り返しやすいのか\n・相手からどう見えやすいのか\n・最初に変えるべきことは何か\n\n「いい人止まり」\n「期待して空回りする」\n「アプリで会えない」\nそんな悩みを、感覚ではなく整理して見える化します。\n\n完全無料、所要時間は約2分です。\n診断後すぐに、あなた専用の解説をこのトークで受け取れます。`,
+    env.LINE_TOKEN,
+  );
   await pushLiffButton(
     userId,
-    '無料で診断を受けますか？',
-    '診断をはじめる（無料）',
+    '下のボタンから診断を始めてください。',
+    '無料で診断する',
     `https://liff.line.me/${env.LIFF_ID}`,
     env.LINE_TOKEN,
   );
 }
 
 async function sendWelcome(userId, env) {
-  await pushLiffButton(
-    userId,
-    MSG_WELCOME[0],
-    '診断をはじめる（無料）',
-    `https://liff.line.me/${env.LIFF_ID}`,
-    env.LINE_TOKEN,
-  );
+  return sendMenuGuide(userId, env);
 }
 
 async function sendMenuGuide(userId, env) {
@@ -147,12 +130,6 @@ export async function receiveLiffResult(userId, resultType, env) {
 
   await pushText(userId, messages.slice(0, 2), env.LINE_TOKEN);
 
-  // 3. 気づき固定メッセージ（防御解除）
-  const noteData = PAID_NOTES[paidNoteKey];
-  if (noteData?.fixedAwarenessText) {
-    await pushText(userId, noteData.fixedAwarenessText, env.LINE_TOKEN);
-  }
-
   await pushQuickReply(
     userId,
     messages[2],
@@ -196,7 +173,7 @@ async function sendNoteUrl(userId, session, env) {
 
   const { paidNoteKey } = getResultMeta(session.resultType);
   const note = PAID_NOTES[paidNoteKey];
-  const message = buildNoteMessage(note);
+  const message = buildNoteMessage(note, session.resultType);
   await pushText(userId, message, env.LINE_TOKEN);
 }
 
