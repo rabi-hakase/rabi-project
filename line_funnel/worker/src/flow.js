@@ -76,6 +76,9 @@ async function dispatch(userId, text, session, env) {
 // ── ウェルカム ────────────────────────────────────────────
 
 async function sendFollowWelcome(userId, env) {
+  // 再追加時に前回セッションをクリア
+  await env.KV_SESSIONS.delete(userId);
+
   await pushText(
     userId,
     `ラビ博士のLINEへようこそ！\n\n9問に答えるだけで、\nあなたの恋愛が止まりやすいポイントがわかります。\n\nわかることは3つです。\n\n・なぜ同じ失敗を繰り返しやすいのか\n・相手からどう見えやすいのか\n・最初に変えるべきことは何か\n\n「いい人止まり」\n「期待して空回りする」\n「アプリで会えない」\nそんな悩みを、感覚ではなく整理して見える化します。\n\n完全無料、所要時間は約2分です。\n診断後すぐに、あなた専用の解説をこのトークで受け取れます。`,
