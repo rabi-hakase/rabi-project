@@ -58,12 +58,6 @@ async function dispatch(userId, text, session, env) {
     return sendWelcome(userId, env);
   }
 
-  // ブラウザ診断からのタイプ受信（コード or タイプ名）
-  const typeCode = resolveTypeCode(text);
-  if (typeCode) {
-    return receiveLiffResult(userId, typeCode, env);
-  }
-
   // セッション状態で分岐
   if (session?.step === 'done') {
     return sendDoneGuide(userId, env);
@@ -76,9 +70,6 @@ async function dispatch(userId, text, session, env) {
 // ── ウェルカム ────────────────────────────────────────────
 
 async function sendFollowWelcome(userId, env) {
-  // 再追加時に前回セッションをクリア
-  await env.KV_SESSIONS.delete(userId);
-
   await pushText(
     userId,
     `ラビ博士のLINEへようこそ！\n\n9問に答えるだけで、\nあなたの恋愛が止まりやすいポイントがわかります。\n\nわかることは3つです。\n\n・なぜ同じ失敗を繰り返しやすいのか\n・相手からどう見えやすいのか\n・最初に変えるべきことは何か\n\n「いい人止まり」\n「期待して空回りする」\n「アプリで会えない」\nそんな悩みを、感覚ではなく整理して見える化します。\n\n完全無料、所要時間は約2分です。\n診断後すぐに、あなた専用の解説をこのトークで受け取れます。`,
@@ -150,28 +141,24 @@ export async function receiveLiffResult(userId, resultType, env) {
 // ── 限定コンテンツ配信 ────────────────────────────────────
 
 async function sendLimitedContent(userId, session, env) {
-  // セッションがある場合 → そのまま結果送信
-  if (session?.resultType) {
-    const { contentKey, pdfPath } = getResultMeta(session.resultType);
-    const content = LIMITED_CONTENTS[contentKey];
-    const pdfUrl = env.SITE_URL ? `${env.SITE_URL}/${pdfPath}` : null;
-    const messages = buildLimitedContentMessages(session.resultType, content, pdfUrl);
-
-    await pushText(userId, messages.slice(0, 2), env.LINE_TOKEN);
-    await pushQuickReply(
-      userId,
-      messages[2],
-      [{ label: 'noteを見る', text: 'note見る' }],
-      env.LINE_TOKEN,
-    );
+  if (!session?.resultType) {
+    await sendWelcome(userId, env);
     return;
   }
 
-  // セッションがない場合（ブラウザ診断から来た人）→ 色分けFlexボタン
-  await pushFlex(
+  const { contentKey, pdfPath } = getResultMeta(session.resultType);
+  const content = LIMITED_CONTENTS[contentKey];
+  const pdfUrl = env.SITE_URL ? `${env.SITE_URL}/${pdfPath}` : null;
+  const messages = buildLimitedContentMessages(session.resultType, content, pdfUrl);
+
+  // 1通目（案内）・2通目（PDFリンク）→ テキスト
+  await pushText(userId, messages.slice(0, 2), env.LINE_TOKEN);
+
+  // 3通目（noteティザー）→ クイックリプライ
+  await pushQuickReply(
     userId,
-    '診断結果を受け取る',
-    buildTypeSelectFlex(),
+    messages[2],
+    [{ label: 'noteを見る', text: 'note見る' }],
     env.LINE_TOKEN,
   );
 }
@@ -187,88 +174,10 @@ async function sendNoteUrl(userId, session, env) {
   const { paidNoteKey } = getResultMeta(session.resultType);
   const note = PAID_NOTES[paidNoteKey];
   const message = buildNoteMessage(note, session.resultType);
-  if (message.type === 'flex') {
-    await pushFlex(userId, message.altText, message.contents, env.LINE_TOKEN);
-  } else {
-    await pushText(userId, message.text, env.LINE_TOKEN);
-  }
+  await pushText(userId, message, env.LINE_TOKEN);
 }
 
 // ── ヘルパー ──────────────────────────────────────────────
-
-function resolveTypeCode(text) {
-  const validCodes = ['L1','L2','K1','K2','A1','A2'];
-  const upper = text.toUpperCase();
-  if (validCodes.includes(upper)) return upper;
-
-  const nameMap = {
-    'いい人止まり・無難化型': 'L1',
-    'いい人止まり・遠慮過多型': 'L2',
-    '期待先行・妄想先行型': 'K1',
-    '期待先行・不安過敏型': 'K2',
-    'アプリ失速・プロフ弱者型': 'A1',
-    'アプリ失速・会話失速型': 'A2',
-  };
-  return nameMap[text] || null;
-}
-
-function buildTypeSelectFlex() {
-  const types = [
-    { code: 'L1', label: 'いい人止まり・無難化型', color: '#4a9eff' },
-    { code: 'L2', label: 'いい人止まり・遠慮過多型', color: '#4a9eff' },
-    { code: 'K1', label: '期待先行・妄想先行型', color: '#f0b429' },
-    { code: 'K2', label: '期待先行・不安過敏型', color: '#f0b429' },
-    { code: 'A1', label: 'アプリ失速・プロフ弱者型', color: '#4caf8a' },
-    { code: 'A2', label: 'アプリ失速・会話失速型', color: '#4caf8a' },
-  ];
-
-  return {
-    type: 'bubble',
-    size: 'giga',
-    header: {
-      type: 'box',
-      layout: 'vertical',
-      backgroundColor: '#08080f',
-      paddingAll: '20px',
-      contents: [
-        {
-          type: 'text',
-          text: '診断結果を受け取る',
-          size: 'lg',
-          weight: 'bold',
-          color: '#f0f0f8',
-        },
-        {
-          type: 'text',
-          text: 'ブラウザ診断で表示されたタイプを選んでください',
-          size: 'xs',
-          color: '#7070a0',
-          margin: 'sm',
-          wrap: true,
-        },
-      ],
-    },
-    body: {
-      type: 'box',
-      layout: 'vertical',
-      backgroundColor: '#0d0d1a',
-      paddingAll: '16px',
-      spacing: 'sm',
-      contents: types.map(t => ({
-        type: 'button',
-        action: {
-          type: 'message',
-          label: t.label,
-          text: t.label,
-        },
-        style: 'primary',
-        color: t.color,
-        height: 'sm',
-        margin: 'sm',
-      })),
-    },
-  };
-}
 
 function getResultMeta(resultType) {
   const map = {
