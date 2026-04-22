@@ -58,10 +58,10 @@ async function dispatch(userId, text, session, env) {
     return sendWelcome(userId, env);
   }
 
-  // ブラウザ診断からのタイプコード受信（L1, L2, K1, K2, A1, A2）
-  const validTypes = ['L1','L2','K1','K2','A1','A2'];
-  if (validTypes.includes(text.toUpperCase())) {
-    return receiveLiffResult(userId, text.toUpperCase(), env);
+  // ブラウザ診断からのタイプ受信（コード or タイプ名）
+  const typeCode = resolveTypeCode(text);
+  if (typeCode) {
+    return receiveLiffResult(userId, typeCode, env);
   }
 
   // セッション状態で分岐
@@ -196,6 +196,22 @@ async function sendNoteUrl(userId, session, env) {
 
 // ── ヘルパー ──────────────────────────────────────────────
 
+function resolveTypeCode(text) {
+  const validCodes = ['L1','L2','K1','K2','A1','A2'];
+  const upper = text.toUpperCase();
+  if (validCodes.includes(upper)) return upper;
+
+  const nameMap = {
+    'いい人止まり・無難化型': 'L1',
+    'いい人止まり・遠慮過多型': 'L2',
+    '期待先行・妄想先行型': 'K1',
+    '期待先行・不安過敏型': 'K2',
+    'アプリ失速・プロフ弱者型': 'A1',
+    'アプリ失速・会話失速型': 'A2',
+  };
+  return nameMap[text] || null;
+}
+
 function buildTypeSelectFlex() {
   const types = [
     { code: 'L1', label: 'いい人止まり・無難化型', color: '#4a9eff' },
@@ -243,7 +259,7 @@ function buildTypeSelectFlex() {
         action: {
           type: 'message',
           label: t.label,
-          text: t.code,
+          text: t.label,
         },
         style: 'primary',
         color: t.color,
